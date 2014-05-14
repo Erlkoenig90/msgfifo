@@ -11,6 +11,7 @@ static dev_t chrDevID = -1;
 static FifoDev* fifoDev = NULL;
 struct class* ffdev_class;
 struct workqueue_struct* msgTimerQueue = NULL;
+static char controlState = 0;
 
 static void onMsgTimer (struct work_struct *work);
 
@@ -19,6 +20,7 @@ DECLARE_DELAYED_WORK(fifo_put_timer, &onMsgTimer);
 
 static int msgfifo_init (void) {
 	printk("MSG FIFO Module init\n");
+	controlState = 0;
 
 	if ((msgTimerQueue = create_singlethread_workqueue ("msgfifo_queue")) == NULL) {
 		printk ("create_singlethread_workqueue failed!\n");
@@ -76,7 +78,9 @@ static void msgfifo_exit (void) {
 		class_destroy (ffdev_class);
 	}
 	if (msgTimerQueue  != NULL) {
+		controlState = 1;
 		if (!cancel_delayed_work (&fifo_put_timer)) {
+			while (controlState != 2);
 			flush_workqueue (msgTimerQueue);
 		}
 		destroy_workqueue (msgTimerQueue);
@@ -84,6 +88,7 @@ static void msgfifo_exit (void) {
 }
 
 static void onMsgTimer (struct work_struct *work) {
+	if (controlState > 0) { controlState = 2; return; }
 	printk ("queued work gets executed\n");
 
 	if (!queue_delayed_work (msgTimerQueue, &fifo_put_timer, HZ)) {
