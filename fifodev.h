@@ -5,7 +5,14 @@
 
 #include "msgfifo.h"
 
-struct FifoDev;
+
+struct FifoDev {
+	MsgFifo* fifo;
+	struct cdev* chrDev;
+	struct device* devfile;
+	dev_t id;
+	int handle;
+};
 typedef struct FifoDev FifoDev;
 
 FifoDev* fifoDevNew (dev_t id);

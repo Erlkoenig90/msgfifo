@@ -10,15 +10,31 @@
 static dev_t chrDevID = -1;
 static FifoDev* fifoDev = NULL;
 struct class* ffdev_class;
+struct workqueue_struct* msgTimerQueue = NULL;
 
+static void onMsgTimer (struct work_struct *work);
 
+DECLARE_DELAYED_WORK(fifo_put_timer, &onMsgTimer);
 
 
 static int msgfifo_init (void) {
 	printk("MSG FIFO Module init\n");
 
+	if ((msgTimerQueue = create_singlethread_workqueue ("msgfifo_queue")) == NULL) {
+		printk ("create_singlethread_workqueue failed!\n");
+		return -ENOMEM;
+	}
+	if (!queue_delayed_work (msgTimerQueue, &fifo_put_timer, HZ)) {
+		printk ("queue_delayed_work failed!\n");
+		destroy_workqueue (msgTimerQueue);
+		msgTimerQueue = NULL;
+		return -ENOMEM;
+	}
+
 	if (IS_ERR (ffdev_class = class_create (THIS_MODULE, "msgfifo"))) {
 		printk ("msgfifo class creation failed!\n");
+		destroy_workqueue (msgTimerQueue);
+		msgTimerQueue = NULL;
 		return -ENOMEM;
 	}
 
@@ -26,6 +42,8 @@ static int msgfifo_init (void) {
 		printk ("Device ID allocation failed!\n");
 		chrDevID = -1;
 		class_destroy (ffdev_class);
+		destroy_workqueue (msgTimerQueue);
+		msgTimerQueue = NULL;
 		return -ENOMEM;
 	} else {
 		printk ("MSG FIFO Got device ID %d (%d:%d)\n", chrDevID, MAJOR (chrDevID), MINOR (chrDevID));
@@ -35,6 +53,8 @@ static int msgfifo_init (void) {
 			unregister_chrdev_region (chrDevID, 1);
 			chrDevID = -1;
 			class_destroy (ffdev_class);
+			destroy_workqueue (msgTimerQueue);
+			msgTimerQueue = NULL;
 			return -ENOMEM;
 		} else {
 			printk ("FIFO device created.\n");
@@ -55,6 +75,23 @@ static void msgfifo_exit (void) {
 	if (ffdev_class != NULL) {
 		class_destroy (ffdev_class);
 	}
+	if (msgTimerQueue  != NULL) {
+		if (!cancel_delayed_work (&fifo_put_timer)) {
+			flush_workqueue (msgTimerQueue);
+		}
+		destroy_workqueue (msgTimerQueue);
+	}
+}
+
+static void onMsgTimer (struct work_struct *work) {
+	printk ("queued work gets executed\n");
+
+	if (!queue_delayed_work (msgTimerQueue, &fifo_put_timer, HZ)) {
+		printk ("queue_delayed_work failed!\n");
+	}
+
+	static int i = 0;
+	msgFifoPut(fifoDev->fifo, "Work %d", ++i);
 }
 
 module_init(msgfifo_init);

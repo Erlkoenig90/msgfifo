@@ -1,6 +1,7 @@
 ifneq ($(KERNELRELEASE),)
 obj-m := mymodule.o 
 mymodule-objs := modmain.o msgfifo.o fifodev.o
+ccflags-y := -Wall -Wextra -Wno-unused-parameter
 
 else
 KDIR := /lib/modules/$(shell uname -r)/build

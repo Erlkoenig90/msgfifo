@@ -49,18 +49,11 @@ static const struct file_operations ffdev_fops = {
 		.release = &ffdev_close,
 };
 
-
-struct FifoDev {
-	MsgFifo* fifo;
-	struct cdev* chrDev;
-	struct device* sysfsdev;
-	dev_t id;
-};
-
 FifoDev* fifoDevNew (dev_t id) {
 	FifoDev* dev = kmalloc (sizeof (FifoDev), GFP_KERNEL);
 	if (dev == NULL) return NULL;
 	dev->id = id;
+	dev->handle = 0;
 
 	if ((dev->fifo = msgFifoNew ()) == NULL) {
 		kfree (dev);
@@ -89,8 +82,7 @@ FifoDev* fifoDevNew (dev_t id) {
 		return NULL;
 	}
 
-
-	if ((void*)(dev->sysfsdev = device_create (ffdev_class, NULL, id, (void*) dev, "msgfifo_%d", MINOR (id))) == ERR_PTR) {
+	if ((void*) (dev->devfile = device_create (ffdev_class, NULL, id, (void*) dev, "msgfifo_%d", MINOR (id))) == ERR_PTR) {
 		cdev_del (dev->chrDev);
 		msgFifoFree (dev->fifo);
 		kfree (dev);
