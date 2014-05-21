@@ -3,7 +3,5 @@
 
 #include <linux/device.h>
 
-extern struct class* ffdev_class;
-
 
 #endif /* MODMAIN_H_ */

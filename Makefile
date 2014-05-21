@@ -1,6 +1,6 @@
 ifneq ($(KERNELRELEASE),)
 obj-m := mymodule.o 
-mymodule-objs := modmain.o msgfifo.o fifodev.o
+mymodule-objs := modmain.o
 ccflags-y := -Wall -Wextra -Wno-unused-parameter
 
 else
