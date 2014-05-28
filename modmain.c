@@ -16,10 +16,10 @@ typedef struct {
 	bool wantQuit;
 	struct completion completion;
 } MyThread;
-MyThread threads [2];
+static MyThread threads [2];
 
 
-DEFINE_MUTEX(cookie_mutex);
+static DEFINE_MUTEX(cookie_mutex);
 
 
 static int threadFun (void* data);
@@ -63,9 +63,9 @@ static void killThread (MyThread* t) {
 }
 
 static int threadFun (void* data) {
+	int ret;
 	MyThread* t = (MyThread*) data;
 	printk ("Thread %s starting\n", t->task->comm);
-	int ret;
 
 	while ((ret = wait_event_interruptible_timeout (t->wq, t->wantQuit, HZ / 10)) == 0 /* timeout */) {
 		/*
