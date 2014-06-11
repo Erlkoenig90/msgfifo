@@ -21,12 +21,16 @@ void onclose (int sig) {
 	run = 0;
 }
 
-int main () {
+int main (int argc, char* argv []) {
 	signal (SIGTERM, &onclose);
 	signal (SIGQUIT, &onclose);
 	signal (SIGINT, &onclose);
 	signal (SIGKILL, &onclose);
 	signal (SIGHUP, &onclose);
+
+	int sleeptime = 100000;
+	if (argc >= 2)
+		sleeptime = atoi (argv [1]);
 
 	fd = open (filename, O_RDONLY);
 
@@ -56,7 +60,7 @@ int main () {
 			fwrite (buffer, 1, r, stdout);
 			puts ("");
 		} else
-			usleep (100000);
+			usleep (sleeptime);
 	}
 
 	printf ("Closing...\n"); fflush (stdout);
