@@ -46,7 +46,7 @@ RingReader* ringReaderNew (RingBuffer* b) {
 		b->firstReader->prev = r;
 	b->firstReader = r;
 
-	printk ("Registering RingReader @ %d / %d\n", r->pointer, r->fill);
+//	printk ("Registering RingReader @ %d / %d\n", r->pointer, r->fill);
 
 	spin_unlock (&b->lock);
 
@@ -98,7 +98,7 @@ int ringBufferPut (RingBuffer* b, const char* fmt, ...) {
 		}
 	}
 
-	printk ("ringBufferPut -> %d\n", old);
+//	printk ("ringBufferPut -> %d\n", old);
 
 	spin_unlock (&b->lock);
 
@@ -115,9 +115,9 @@ int ringBufferPut (RingBuffer* b, const char* fmt, ...) {
 
 	spin_lock (&b->lock);
 	++(b->maxfill);
-	printk ("maxfill -> %d\n", b->maxfill);
+//	printk ("maxfill -> %d\n", b->maxfill);
 	for (RingReader* r = b->firstReader; r != NULL; r = r->next) {
-		printk ("Reader fill %d -> %d\n", r->fill, r->fill + 1);
+//		printk ("Reader fill %d -> %d\n", r->fill, r->fill + 1);
 		++(r->fill);
 	}
 	spin_unlock (&b->lock);

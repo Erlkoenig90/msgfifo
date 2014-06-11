@@ -165,11 +165,11 @@ ssize_t ffdev_read (struct file* filp, char __user * buffer, size_t size, loff_t
 
 	ringReaderLock (r);
 
-	printk ("Peek...\n");
+//	printk ("Peek...\n");
 	if (ringBufferPeek(r, &msg, &len) == 0) {
-		printk("Peek == 0 ... Unlocking \n");
+//		printk("Peek == 0 ... Unlocking \n");
 		ringReaderUnLock (r);
-		printk ("Unlocked\n");
+//		printk ("Unlocked\n");
 		return 0;
 	}
 	if (len > size) {
