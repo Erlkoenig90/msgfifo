@@ -1,6 +1,7 @@
 #include <linux/slab.h>
 #include <linux/cdev.h>
 #include <linux/export.h>
+#include <asm/uaccess.h>
 
 #include "fifodev.h"
 #include "modmain.h"
@@ -49,25 +50,35 @@ static const struct file_operations ffdev_fops = {
 		.release = &ffdev_close,
 };
 
+
+static FifoDev* registeredDevs = NULL;
+
+static struct mutex mtxDevList;
+
+void fifoDevsInit (void) {
+	mutex_init (&mtxDevList);
+}
+
+
 FifoDev* fifoDevNew (dev_t id) {
 	FifoDev* dev = kmalloc (sizeof (FifoDev), GFP_KERNEL);
 	if (dev == NULL) return NULL;
 	dev->id = id;
 	dev->handle = 0;
 
-	if ((dev->fifo = msgFifoNew ()) == NULL) {
+	if ((dev->rb = ringBufferNew (10, 1024)) == NULL) {
 		kfree (dev);
 		return NULL;
 	}
 
 	if ((dev->chrDev = cdev_alloc ()) == NULL) {
-		msgFifoFree (dev->fifo);
+		ringBufferFree(dev->rb);
 		kfree (dev);
 		return NULL;
 	}
 	if (kobject_set_name (&dev->chrDev->kobj, "Message Fifo Read End %d:%d", MAJOR (id), MINOR (id)) < 0) {
 		cdev_del (dev->chrDev);
-		msgFifoFree (dev->fifo);
+		ringBufferFree(dev->rb);
 		kfree (dev);
 		return NULL;
 	}
@@ -77,36 +88,104 @@ FifoDev* fifoDevNew (dev_t id) {
 
 	if (cdev_add (dev->chrDev, id, 1) < 0) {
 		cdev_del (dev->chrDev);
-		msgFifoFree (dev->fifo);
+		ringBufferFree(dev->rb);
 		kfree (dev);
 		return NULL;
 	}
 
 	if ((void*) (dev->devfile = device_create (ffdev_class, NULL, id, (void*) dev, "msgfifo_%d", MINOR (id))) == ERR_PTR) {
 		cdev_del (dev->chrDev);
-		msgFifoFree (dev->fifo);
+		ringBufferFree(dev->rb);
 		kfree (dev);
 		return NULL;
 	}
+
+	dev->prev = NULL;
+	mutex_lock (&mtxDevList);
+	if (registeredDevs == NULL) {
+		dev->next = NULL;
+		registeredDevs = dev;
+	} else {
+		dev->next = registeredDevs;
+		registeredDevs->prev = dev;
+		registeredDevs = dev;
+	}
+	mutex_unlock (&mtxDevList);
 
 	return dev;
 }
 
 void fifoDevFree (FifoDev* dev) {
+	mutex_lock (&mtxDevList);
+
+	if (dev->prev != NULL) {
+		dev->prev->next = dev->next;
+	} else {
+		registeredDevs = dev;
+	}
+	if (dev->next != NULL) {
+		dev->next->prev = dev->prev;
+	}
+	mutex_unlock (&mtxDevList);
+
 	cdev_del (dev->chrDev);
-	msgFifoFree (dev->fifo);
+	ringBufferFree(dev->rb);
 	device_destroy (ffdev_class, dev->id);
 	kfree (dev);
 }
 
-int ffdev_open (struct inode* in, struct file* filp) {
-	return -1;
+FifoDev* getDevByID (dev_t id) {
+	mutex_lock (&mtxDevList);
+	for (FifoDev* dev = registeredDevs; dev != NULL; dev = dev->next) {
+		if (dev->id == id) {
+			mutex_unlock (&mtxDevList);
+			return dev;
+		}
+	}
+	mutex_unlock (&mtxDevList);
+	return NULL;
 }
 
-ssize_t ffdev_read (struct file* filp, char* buffer, size_t size, loff_t* off) {
-	return -1;
+int ffdev_open (struct inode* in, struct file* filp) {
+	FifoDev* dev = getDevByID (in->i_rdev);
+	if (dev == NULL) return -ENODEV;
+
+	RingBuffer* b = dev->rb;
+
+	RingReader* r = ringReaderNew (b);
+
+	filp->private_data = (void*) r;
+
+	return 0;
+}
+
+ssize_t ffdev_read (struct file* filp, char __user * buffer, size_t size, loff_t* off) {
+	char* msg; size_t len;
+	RingReader* r = (RingReader*) filp->private_data;
+
+	ringReaderLock (r);
+
+	printk ("Peek...\n");
+	if (ringBufferPeek(r, &msg, &len) == 0) {
+		printk("Peek == 0 ... Unlocking \n");
+		ringReaderUnLock (r);
+		printk ("Unlocked\n");
+		return 0;
+	}
+	if (len > size) {
+		ringReaderUnLock (r);
+		return -ENOMEM;
+	}
+
+	unsigned long ret = copy_to_user (buffer, msg, len);
+
+	ringBufferConsume (r);
+	ringReaderUnLock (r);
+
+	return ret == 0 ? len : -EIO;
 }
 
 int ffdev_close (struct inode * in, struct file* filp) {
+	ringReaderFree((RingReader*) filp->private_data);
 	return -1;
 }

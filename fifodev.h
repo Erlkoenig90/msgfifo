@@ -3,18 +3,20 @@
 
 #include <linux/fs.h>
 
-#include "msgfifo.h"
+#include "ringbuffer.h"
 
 
 struct FifoDev {
-	MsgFifo* fifo;
+	RingBuffer* rb;
 	struct cdev* chrDev;
 	struct device* devfile;
 	dev_t id;
 	int handle;
+	struct FifoDev* next, *prev;
 };
 typedef struct FifoDev FifoDev;
 
+void fifoDevsInit (void);
 FifoDev* fifoDevNew (dev_t id);
 void fifoDevFree (FifoDev* dev);
 

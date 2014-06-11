@@ -3,7 +3,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 
-#include "msgfifo.h"
+#include "ringbuffer.h"
 #include "fifodev.h"
 #include "modmain.h"
 
@@ -20,8 +20,8 @@ DECLARE_DELAYED_WORK(fifo_put_timer, &onMsgTimer);
 
 static int msgfifo_init (void) {
 	printk("MSG FIFO Module init\n");
-	controlState = 0;
 
+	controlState = 0;
 	if ((msgTimerQueue = create_singlethread_workqueue ("msgfifo_queue")) == NULL) {
 		printk ("create_singlethread_workqueue failed!\n");
 		return -ENOMEM;
@@ -49,6 +49,7 @@ static int msgfifo_init (void) {
 		return -ENOMEM;
 	} else {
 		printk ("MSG FIFO Got device ID %d (%d:%d)\n", chrDevID, MAJOR (chrDevID), MINOR (chrDevID));
+		fifoDevsInit ();
 
 		if ((fifoDev = fifoDevNew (chrDevID)) == NULL) {
 			printk ("FIFO device creation failed!\n");
@@ -68,6 +69,14 @@ static int msgfifo_init (void) {
 
 static void msgfifo_exit (void) {
 	printk("MSG FIFO Module exit\n");
+	if (msgTimerQueue  != NULL) {
+		controlState = 1;
+		if (!cancel_delayed_work (&fifo_put_timer)) {
+			while (controlState != 2);
+			flush_workqueue (msgTimerQueue);
+		}
+		destroy_workqueue (msgTimerQueue);
+	}
 	if (chrDevID != -1) {
 		unregister_chrdev_region (chrDevID, 1);
 	}
@@ -76,14 +85,6 @@ static void msgfifo_exit (void) {
 	}
 	if (ffdev_class != NULL) {
 		class_destroy (ffdev_class);
-	}
-	if (msgTimerQueue  != NULL) {
-		controlState = 1;
-		if (!cancel_delayed_work (&fifo_put_timer)) {
-			while (controlState != 2);
-			flush_workqueue (msgTimerQueue);
-		}
-		destroy_workqueue (msgTimerQueue);
 	}
 }
 
@@ -96,7 +97,7 @@ static void onMsgTimer (struct work_struct *work) {
 	}
 
 	static int i = 0;
-	msgFifoPut(fifoDev->fifo, "Work %d", ++i);
+	ringBufferPut(fifoDev->rb, "Work %d", ++i);
 }
 
 module_init(msgfifo_init);
